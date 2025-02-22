@@ -1,73 +1,97 @@
-import spacy
 import pandas as pd
-from transformers import pipeline
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import spacy
+import json
 
-# Load NLP models
+# Load spaCy model for sentence segmentation
 nlp = spacy.load("en_core_web_sm")
-sentiment_analyzer = pipeline("text-classification", model="cardiffnlp/twitter-roberta-base-emotion")
 
-# Define individual emotion categories
-EMOTION_CATEGORIES = ["happy", "sad", "surprised", "angry", "disgusted", "fearful", "neutral"]
+# Load Emotion Analysis Model
+emotion_model_name = "j-hartmann/emotion-english-distilroberta-base"
+emotion_tokenizer = AutoTokenizer.from_pretrained(emotion_model_name)
+emotion_model = AutoModelForSequenceClassification.from_pretrained(emotion_model_name)
+emotion_model.eval()
+
+# Load Sentiment Analysis Model
+sentiment_model_name = "siebert/sentiment-roberta-large-english"
+sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_name)
+sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_name)
+sentiment_model.eval()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+sentiment_model.to(device)
+
+# Define labels
+EMOTION_LABELS = ["anger", "disgust", "fear", "joy", "sadness", "surprise", "neutral"]
+SENTIMENT_LABELS = ["Negative", "Positive"]
 
 def chunk_text(text):
     """Split text into meaningful sentence chunks."""
     doc = nlp(text)
     return [sent.text.strip() for sent in doc.sents]
 
-def analyze_sentiment(text):
-    """Perform sentiment analysis and return detected emotion."""
-    result = sentiment_analyzer(text)[0]
-    return result["label"].lower()  # Extract detected emotion
+def get_emotion_scores(text):
+    """Get emotion distribution for a given text chunk."""
+    if not text.strip():
+        return {label: 0.0 for label in EMOTION_LABELS}
+    
+    inputs = emotion_tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    with torch.no_grad():
+        outputs = emotion_model(**inputs)
+    probs = torch.nn.functional.softmax(outputs.logits, dim=-1).squeeze().tolist()
+    
+    return {label: probs[i] for i, label in enumerate(EMOTION_LABELS)}
 
 def extract_ner(text):
     """Extract named entities using spaCy."""
     doc = nlp(text)
     return [(ent.text, ent.label_) for ent in doc.ents]
 
+def get_sentiment_scores(text):
+    """Get sentiment scores."""
+    if not isinstance(text, str) or text.strip() == "":
+        return {label: 0.0 for label in SENTIMENT_LABELS}
+
+    inputs = sentiment_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        outputs = sentiment_model(**inputs)
+
+    probs = torch.nn.functional.softmax(outputs.logits, dim=-1).squeeze().tolist()
+    return {label: probs[i] for i, label in enumerate(SENTIMENT_LABELS)}
+
 def process_diary_entry(entry):
-    """Process diary entry: chunk text, analyze sentiment, and extract NER."""
+    """Process a single diary entry into multiple chunks with emotions & sentiment."""
     chunks = chunk_text(entry)
     processed_data = []
     
-    # Initialize emotion counters
-    emotion_count = {e: 0 for e in EMOTION_CATEGORIES}
-
     for chunk in chunks:
-        emotion = analyze_sentiment(chunk)
-        ner_tags = extract_ner(chunk)
-
-        # Update emotion counters
-        if emotion in emotion_count:
-            emotion_count[emotion] += 1
-
+        emotions = get_emotion_scores(chunk)
+        sentiment = get_sentiment_scores(chunk)
+        entities = extract_ner(chunk)
+        
         processed_data.append({
             "text": chunk,
-            "emotion": emotion,
-            "ner": ner_tags
+            "emotion": emotions,
+            "sentiment": sentiment,
+            "named_entities": entities
         })
     
-    return processed_data, emotion_count
+    return processed_data
 
 def process_csv(file_path):
-    """Read CSV, process each entry, and return structured data."""
+    """Process diary CSV and return structured data in JSON format."""
     df = pd.read_csv(file_path)
     processed_entries = []
     
     for _, row in df.iterrows():
         date = row["Date"]
         entry = row["Entry"]
-        processed_chunks, emotion_count = process_diary_entry(entry)
+        processed_chunks = process_diary_entry(entry)
         
-        for chunk in processed_chunks:
-            processed_entries.append({
-                "date": date,
-                **chunk
-            })
-        
-        # Store overall emotion counts per entry
-        processed_entries.append({
-            "date": date,
-            "overall_emotion_count": emotion_count
-        })
+        for chunk_data in processed_chunks:
+            chunk_data["date"] = date
+            processed_entries.append(chunk_data)
     
-    return processed_entries
+    return json.dumps(processed_entries, indent=4)  # Return JSON data
+

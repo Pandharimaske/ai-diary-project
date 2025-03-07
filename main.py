@@ -1,5 +1,5 @@
-from data_ingestion import process_csv
-from embeddings import store_entries
+from CHATBOT.data_ingestion import process_csv
+from CHATBOT.vector_db import store_entries
 from chatbot import chat_with_diary
 
 if __name__ == "__main__":
@@ -14,5 +14,3 @@ if __name__ == "__main__":
         if query.lower() == "exit":
             break
         print("🤖 Diary says:", chat_with_diary(query))
-
-

@@ -20,11 +20,11 @@ collection = db["diary_entries"]
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 print(f"Using device: {device}")
 
-# Initialize LangChain embedding model
-embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5")
+# Initialize LangChain embedding model on the detected device
+embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5", device=device)
 
 # MongoDB Atlas Vector Store
-vector_store = MongoDBAtlas(
+vector_store = MongoDBAtlasVectorSearch(
     mongo_uri=MONGO_URI,
     db_name="diary_database",
     collection_name="diary_entries",
@@ -45,7 +45,7 @@ def store_entries(processed_entries):
             metadata={
                 "date": entry["date"],
                 "sentiment": entry["sentiment"],
-                "emotions": entry["emotions"],
+                "emotion": entry["emotion"],  # Fixed KeyError
                 "embedding": embedding
             }
         )
@@ -55,6 +55,8 @@ def store_entries(processed_entries):
     vector_store.add_documents(docs)
     print("Data successfully inserted into MongoDB!")
 
-# Store in MongoDB
-store_entries(processed_entries)
-
+# Ensure 'processed_entries' is defined before calling store_entries
+if "processed_entries" in globals():
+    store_entries(processed_entries)
+else:
+    print("Error: processed_entries is not defined!")

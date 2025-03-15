@@ -45,10 +45,10 @@ def get_emotion_scores(text):
     
     return {label: probs[i] for i, label in enumerate(EMOTION_LABELS)}
 
-def extract_ner(text):
-    """Extract named entities using spaCy."""
-    doc = nlp(text)
-    return [(ent.text, ent.label_) for ent in doc.ents]
+# def extract_ner(text):
+#     """Extract named entities using spaCy."""
+#     doc = nlp(text)
+#     return [(ent.text, ent.label_) for ent in doc.ents]
 
 def get_sentiment_scores(text):
     """Get sentiment scores."""
@@ -70,13 +70,13 @@ def process_diary_entry(entry, date):
     for chunk in chunks:
         emotions = get_emotion_scores(chunk)
         sentiment = get_sentiment_scores(chunk)
-        entities = extract_ner(chunk)
+        # entities = extract_ner(chunk)
         
         processed_data.append({
             "text": chunk,
             "emotion": emotions,
             "sentiment": sentiment,
-            "named_entities": entities,
+            # "named_entities": entities,
             "date": date
         })
     

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain.schema import Document
 
@@ -17,17 +17,17 @@ db = client["diary_database"]
 collection = db["diary_entries"]
 
 # Detect device (GPU, MPS, or CPU)
-device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+device = "mps" if torch.backends.mps.is_available() else "cpu"
 print(f"Using device: {device}")
 
 # Initialize LangChain embedding model on the detected device
-embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5", device=device)
+embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5")
 
 # MongoDB Atlas Vector Store
 vector_store = MongoDBAtlasVectorSearch(
     mongo_uri=MONGO_URI,
     db_name="diary_database",
-    collection_name="diary_entries",
+    collection="diary_entries",
     embedding=embedding_model
 )
 
@@ -56,7 +56,7 @@ def store_entries(processed_entries):
     print("Data successfully inserted into MongoDB!")
 
 # Ensure 'processed_entries' is defined before calling store_entries
-if "processed_entries" in globals():
-    store_entries(processed_entries)
-else:
-    print("Error: processed_entries is not defined!")
+# if "processed_entries" in globals():
+#     store_entries(processed_entries)
+# else:
+#     print("Error: processed_entries is not defined!")

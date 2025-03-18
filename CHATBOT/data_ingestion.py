@@ -1,8 +1,9 @@
 import pandas as pd
 import torch
+import json
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import spacy
-import json
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Load spaCy model for sentence segmentation
 nlp = spacy.load("en_core_web_sm")
@@ -28,10 +29,13 @@ sentiment_model.to(device)
 EMOTION_LABELS = ["anger", "disgust", "fear", "joy", "sadness", "surprise", "neutral"]
 SENTIMENT_LABELS = ["Negative", "Positive"]
 
-def chunk_text(text):
-    """Split text into meaningful sentence chunks."""
-    doc = nlp(text)
-    return [sent.text.strip() for sent in doc.sents]
+def chunk_text(text, chunk_size=200, chunk_overlap=50):
+    """Split text into structured chunks using LangChain."""
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size, 
+        chunk_overlap=chunk_overlap
+    )
+    return text_splitter.split_text(text)
 
 def get_emotion_scores(text):
     """Get emotion distribution for a given text chunk."""
@@ -44,11 +48,6 @@ def get_emotion_scores(text):
     probs = torch.nn.functional.softmax(outputs.logits, dim=-1).squeeze().tolist()
     
     return {label: probs[i] for i, label in enumerate(EMOTION_LABELS)}
-
-# def extract_ner(text):
-#     """Extract named entities using spaCy."""
-#     doc = nlp(text)
-#     return [(ent.text, ent.label_) for ent in doc.ents]
 
 def get_sentiment_scores(text):
     """Get sentiment scores."""
@@ -63,27 +62,64 @@ def get_sentiment_scores(text):
     return {label: probs[i] for i, label in enumerate(SENTIMENT_LABELS)}
 
 def process_diary_entry(entry, date):
-    """Process a single diary entry into multiple chunks with emotions & sentiment."""
+    """Process a diary entry into chunks, analyze emotions & sentiment, and compute overall mood."""
     chunks = chunk_text(entry)
     processed_data = []
+    
+    total_emotions = {label: 0.0 for label in EMOTION_LABELS}
+    total_sentiments = {label: 0.0 for label in SENTIMENT_LABELS}
     
     for chunk in chunks:
         emotions = get_emotion_scores(chunk)
         sentiment = get_sentiment_scores(chunk)
-        # entities = extract_ner(chunk)
-        
+
+        # Sum up emotion and sentiment scores across chunks
+        for label in EMOTION_LABELS:
+            total_emotions[label] += emotions[label]
+
+        for label in SENTIMENT_LABELS:
+            total_sentiments[label] += sentiment[label]
+
         processed_data.append({
             "text": chunk,
             "emotion": emotions,
             "sentiment": sentiment,
-            # "named_entities": entities,
             "date": date
         })
-    
-    return processed_data
 
-def process_csv(file_path):
-    """Process diary CSV and return structured data in JSON format."""
+    # Compute overall dominant emotion
+    dominant_emotion = max(total_emotions, key=total_emotions.get)
+    
+    # Compute sentiment balance
+    mood_score = total_sentiments["Positive"] - total_sentiments["Negative"]  
+
+    # Define mood categories based on dominant emotion & sentiment
+    if dominant_emotion in ["joy", "surprise"]:
+        overall_mood = "Happy 😀"
+    elif dominant_emotion in ["anger", "disgust", "fear"]:
+        overall_mood = "Anxious 😨"
+    elif dominant_emotion == "sadness":
+        overall_mood = "Sad 😢"
+    else:
+        overall_mood = "Neutral 😐"
+
+    # Adjust based on sentiment
+    if mood_score > 0.5:
+        overall_mood += " (Positive Outlook)"
+    elif mood_score < -0.5:
+        overall_mood += " (Negative Outlook)"
+    
+    return {
+        "date": date,
+        "mood": overall_mood,
+        "dominant_emotion": dominant_emotion,
+        "emotion_distribution": total_emotions,
+        "overall_sentiment": total_sentiments,
+        "entries": processed_data  # All processed chunks
+    }
+
+def process_csv(file_path, output_json_path):
+    """Process diary CSV, analyze emotions & mood, and save structured data to JSON."""
     df = pd.read_csv(file_path)
     
     # Ensure necessary columns exist
@@ -96,6 +132,14 @@ def process_csv(file_path):
         date = row["Date"]
         entry = row["Entry"]
         
-        processed_entries.extend(process_diary_entry(entry, date))  # No need to append `date` inside loop
+        processed_entries.append(process_diary_entry(entry, date))
+
+    # Save as JSON file
+    with open(output_json_path, "w", encoding="utf-8") as f:
+        json.dump(processed_entries, f, indent=4, ensure_ascii=False)
     
-    return json.dumps(processed_entries, indent=4)  # Return JSON data
+    print(f"✅ Processed diary entries saved to {output_json_path}")
+
+# Example usage:
+if __name__ == "__main__":
+    process_csv("/Users/pandhari/ai-diary-project/Data/diary_dataset.csv", "processed_diary.json")

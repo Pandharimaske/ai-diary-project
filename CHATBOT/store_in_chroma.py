@@ -1,44 +1,46 @@
 import json
 import chromadb
-from langchain_huggingface import HuggingFaceEmbeddings
 import uuid
-
-# Load embedding model
-embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+from utils import format_date, embed_text
+from ner_activity_extraction import extract_named_entities, extract_activities
 
 # Initialize ChromaDB client
 chroma_client = chromadb.PersistentClient(path="./chroma_diary_db")
 collection = chroma_client.get_or_create_collection(name="diary_entries")
 
 def store_embeddings(json_file):
-    """Store diary entries in ChromaDB with unique IDs."""
+    """Store diary entries in ChromaDB with unique IDs, including NER and activities."""
     
     with open(json_file, "r", encoding="utf-8") as f:
         diary_data = json.load(f)
 
     for entry in diary_data:
+        formatted_date = format_date(entry["date"])
+
         for chunk in entry["entries"]:
             text = chunk["text"]
-            embedding = embedding_model.embed_query(text)
+            embedding = embed_text(text)
+            named_entities = extract_named_entities(text)
+            activities = extract_activities(text)
+
             metadata = {
-                "date": entry["date"],
+                "date": formatted_date,
                 "mood": entry["mood"],
-                "dominant_emotion": entry["dominant_emotion"]
+                "dominant_emotion": entry["dominant_emotion"],
+                "named_entities": ", ".join([f"{ent[0]} ({ent[1]})" for ent in named_entities]) if named_entities else "",  # Convert list to string
+                "activities": ", ".join(activities) if activities else ""  # Convert list to string
             }
 
-            # Generate unique ID for each chunk
             unique_id = str(uuid.uuid4())
 
-            # Store in ChromaDB
             collection.add(
-                ids=[unique_id],  # Use UUID instead of hash-based ID
+                ids=[unique_id],
                 embeddings=[embedding],
                 metadatas=[metadata],
                 documents=[text]
             )
 
-    print("✅ Embeddings stored in ChromaDB!")
+    print("✅ Embeddings stored in ChromaDB with NER and activities!")
 
-# Example usage:
 if __name__ == "__main__":
     store_embeddings("/Users/pandhari/ai-diary-project/processed_diary.json")

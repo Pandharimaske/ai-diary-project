@@ -1,25 +1,22 @@
 import chromadb
 from langchain_ollama import OllamaLLM
-import json
-from langchain_huggingface import HuggingFaceEmbeddings
+from utils import embed_text
 import os
 
+# Set up environment
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# Load embedding model
-embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-
-# Load LLaMA 3.2 model via Ollama
-llm = OllamaLLM(model="mistral")
+# Load LLM (LLaMA 3.2)
+llm = OllamaLLM(model="llama3.2")
 
 # Connect to ChromaDB
 chroma_client = chromadb.PersistentClient(path="./chroma_diary_db")
 collection = chroma_client.get_collection(name="diary_entries")
 
-def retrieve_entries(query, mood_filter=None, date_filter=None, top_k=3):
-    """Retrieve diary entries based on a query with optional mood/date filters."""
+def retrieve_entries(query, mood_filter=None, date_filter=None, ner_filter=None, activity_filter=None, top_k=3):
+    """Retrieve diary entries based on query, mood, date, named entities, and activities."""
     
-    query_embedding = embedding_model.embed_query(query)
+    query_embedding = embed_text(query)
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k
@@ -31,34 +28,14 @@ def retrieve_entries(query, mood_filter=None, date_filter=None, top_k=3):
             continue
         if date_filter and date_filter != meta["date"]:
             continue
+        if ner_filter and not any(ner_filter.lower() in entity[0].lower() for entity in meta.get("named_entities", [])):
+            continue
+        if activity_filter and not any(activity_filter.lower() in activity.lower() for activity in meta.get("activities", [])):
+            continue
         
-        final_results.append({"text": doc, "date": meta["date"], "mood": meta["mood"]})
+        final_results.append({"text": doc, "date": meta["date"], "mood": meta["mood"], "named_entities": meta.get("named_entities", []), "activities": meta.get("activities", [])})
 
     return final_results
-
-def generate_intelligent_response(query, mood_filter=None, date_filter=None, top_k=3):
-    """Retrieve diary entries and generate a simple, effective response."""
-    
-    retrieved_entries = retrieve_entries(query, mood_filter, date_filter, top_k)
-
-    if not retrieved_entries:
-        return "I couldn't find relevant diary entries for your query."
-
-    context = "\n".join([f"Date: {entry['date']}, Mood: {entry['mood']}\nEntry: {entry['text']}" for entry in retrieved_entries])
-
-    prompt = f"""
-    You are my personal AI diary assistant. Answer clearly and concisely based on my diary.
-
-    ----
-    Diary Entries:
-    {context}
-    ----
-    User: {query}
-
-    Provide a helpful response.
-    """
-
-    return llm.invoke(prompt).strip()
 
 if __name__ == "__main__":
     print("💬 AI Diary Chatbot: Type 'exit' to quit.")
@@ -67,5 +44,5 @@ if __name__ == "__main__":
         if query.lower() == "exit":
             print("👋 Goodbye!")
             break
-        response = generate_intelligent_response(query)
+        response = retrieve_entries(query)
         print("\n🤖 AI Response:", response, "\n")

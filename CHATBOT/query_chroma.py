@@ -1,20 +1,23 @@
+import os
+import torch
 import chromadb
 from langchain_ollama import OllamaLLM
 from utils import embed_text
-import os
 
-# Set up environment
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# Set up model selection
+MODEL_NAME = "llama3.2"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Load LLM (LLaMA 3.2)
-llm = OllamaLLM(model="llama3.2")
+# Load Model & Tokenizer
+print(f"🔄 Loading {MODEL_NAME} on {DEVICE}...")
+model = OllamaLLM(model="llama3.2")
 
 # Connect to ChromaDB
 chroma_client = chromadb.PersistentClient(path="./chroma_diary_db")
 collection = chroma_client.get_collection(name="diary_entries")
 
-def retrieve_entries(query, mood_filter=None, date_filter=None, ner_filter=None, activity_filter=None, top_k=3):
-    """Retrieve diary entries based on query, mood, date, named entities, and activities."""
+def retrieve_entries(query, top_k=5):
+    """Retrieve diary entries and generate AI response."""
     
     query_embedding = embed_text(query)
     results = collection.query(
@@ -22,20 +25,19 @@ def retrieve_entries(query, mood_filter=None, date_filter=None, ner_filter=None,
         n_results=top_k
     )
 
-    final_results = []
-    for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-        if mood_filter and mood_filter.lower() not in meta["mood"].lower():
-            continue
-        if date_filter and date_filter != meta["date"]:
-            continue
-        if ner_filter and not any(ner_filter.lower() in entity[0].lower() for entity in meta.get("named_entities", [])):
-            continue
-        if activity_filter and not any(activity_filter.lower() in activity.lower() for activity in meta.get("activities", [])):
-            continue
-        
-        final_results.append({"text": doc, "date": meta["date"], "mood": meta["mood"], "named_entities": meta.get("named_entities", []), "activities": meta.get("activities", [])})
+    retrieved_texts = [
+        f"Entry: {doc}\nMood: {meta.get('mood', 'Unknown')}\nDominant Emotion: {meta.get('dominant_emotion', 'Unknown')}"
+        for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+    ]
 
-    return final_results
+    # Prepare prompt for the model
+    prompt = "Based on the diary entries below, answer the query. Consider the mood and dominant emotion for context:\n"
+    prompt += "\n\n".join(retrieved_texts)
+    prompt += f"\n\nUser Query: {query}\nAI Response:"
+
+    response = model.invoke(prompt)
+
+    return response
 
 if __name__ == "__main__":
     print("💬 AI Diary Chatbot: Type 'exit' to quit.")

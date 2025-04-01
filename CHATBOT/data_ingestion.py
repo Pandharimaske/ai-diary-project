@@ -2,25 +2,19 @@ import pandas as pd
 import torch
 import json
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from flair.data import Sentence
-from flair.models import SequenceTagger
-import spacy
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Load flair NER Model
-flair_tagger = SequenceTagger.load("flair/ner-english-large")
 
 # Load Emotion Analysis Model
 emotion_model_name = "j-hartmann/emotion-english-distilroberta-base"
 emotion_tokenizer = AutoTokenizer.from_pretrained(emotion_model_name)
-emotion_model = AutoModelForSequenceClassification.from_pretrained(emotion_model_name)
-emotion_model.eval()
+emotion_model = AutoModelForSequenceClassification.from_pretrained(emotion_model_name).eval()
 
 # Load Sentiment Analysis Model
 sentiment_model_name = "siebert/sentiment-roberta-large-english"
 sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_name)
-sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_name)
-sentiment_model.eval()
+sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_name).eval()
 
 # Move models to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,12 +32,6 @@ def chunk_text(text, chunk_size=200, chunk_overlap=50):
         chunk_overlap=chunk_overlap
     )
     return text_splitter.split_text(text)
-
-def extract_named_entities(text):
-    """Extract named entities using Hugging Face's flair model."""
-    sentence = Sentence(text)
-    flair_tagger.predict(sentence)
-    return [(entity.text, entity.get_label("ner").value) for entity in sentence.get_spans("ner")]
 
 def get_emotion_scores(text):
     """Get emotion distribution for a given text chunk."""
@@ -70,21 +58,16 @@ def get_sentiment_scores(text):
     return {label: probs[i] for i, label in enumerate(SENTIMENT_LABELS)}
 
 def process_diary_entry(entry, date):
-    """Process a diary entry and extract emotions, sentiment, NER, and activities."""
+    """Process a diary entry and extract emotions and sentiment."""
     chunks = chunk_text(entry)
     processed_data = []
     
     total_emotions = {label: 0.0 for label in EMOTION_LABELS}
     total_sentiments = {label: 0.0 for label in SENTIMENT_LABELS}
     
-    all_named_entities = []
-    all_activities = []
-    
     for chunk in chunks:
         emotions = get_emotion_scores(chunk)
         sentiment = get_sentiment_scores(chunk)
-        named_entities = extract_named_entities(chunk)
-        activities = extract_activities(chunk)
 
         # Sum up emotion and sentiment scores across chunks
         for label in EMOTION_LABELS:
@@ -93,24 +76,12 @@ def process_diary_entry(entry, date):
         for label in SENTIMENT_LABELS:
             total_sentiments[label] += sentiment[label]
 
-        all_named_entities.extend(named_entities)
-        all_activities.extend(activities)
-
         processed_data.append({
             "text": chunk,
             "emotion": emotions,
             "sentiment": sentiment,
-            "named_entities": named_entities,
-            "activities": activities,
             "date": date
         })
-
-    # Store for time-series visualization
-    time_series_data = {
-        "date": date,
-        "named_entities": all_named_entities,
-        "activities": all_activities
-    }
 
     # Compute overall dominant emotion
     dominant_emotion = max(total_emotions, key=total_emotions.get)
@@ -140,10 +111,7 @@ def process_diary_entry(entry, date):
         "dominant_emotion": dominant_emotion,
         "emotion_distribution": total_emotions,
         "overall_sentiment": total_sentiments,
-        "named_entities": all_named_entities,
-        "activities": all_activities,
-        "entries": processed_data,  # All processed chunks
-        "time_series": time_series_data  # Separate time-series data
+        "entries": processed_data  # All processed chunks
     }
 
 def process_csv(file_path, output_json_path):

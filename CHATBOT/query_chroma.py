@@ -16,7 +16,6 @@ chroma_client = chromadb.PersistentClient(path="./chroma_diary_db")
 collection = chroma_client.get_collection(name="diary_entries")
 
 def retrieve_entries(query, top_k=5):
-    """Retrieve diary entries and generate AI response."""
     
     query_embedding = embed_text(query)
     results = collection.query(

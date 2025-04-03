@@ -8,11 +8,11 @@ chroma_client = chromadb.PersistentClient(path="./chroma_diary_db")
 collection = chroma_client.get_or_create_collection(name="diary_entries")
 
 def generate_unique_id(text):
-    """Generate a unique, deterministic ID based on text."""
+   
     return hashlib.md5(text.encode()).hexdigest()
 
 def store_embeddings(json_file):
-    """Store diary entries in ChromaDB with unique IDs, ensuring no duplicates."""
+    
     
     with open(json_file, "r", encoding="utf-8") as f:
         diary_data = json.load(f)
@@ -28,7 +28,7 @@ def store_embeddings(json_file):
             embedding = embed_text(text)
 
             metadata = {
-                "mood": entry["mood"],
+                "mood": entry["mood"], 
                 "dominant_emotion": entry["dominant_emotion"]
             }
 

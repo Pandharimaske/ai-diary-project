@@ -26,7 +26,7 @@ EMOTION_LABELS = ["anger", "disgust", "fear", "joy", "sadness", "surprise", "neu
 SENTIMENT_LABELS = ["Negative", "Positive"]
 
 def chunk_text(text, chunk_size=200, chunk_overlap=50):
-    """Split text into structured chunks using LangChain."""
+    
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, 
         chunk_overlap=chunk_overlap
@@ -34,7 +34,7 @@ def chunk_text(text, chunk_size=200, chunk_overlap=50):
     return text_splitter.split_text(text)
 
 def get_emotion_scores(text):
-    """Get emotion distribution for a given text chunk."""
+    
     if not text.strip():
         return {label: 0.0 for label in EMOTION_LABELS}
     
@@ -46,7 +46,7 @@ def get_emotion_scores(text):
     return {label: probs[i] for i, label in enumerate(EMOTION_LABELS)}
 
 def get_sentiment_scores(text):
-    """Get sentiment scores."""
+    
     if not isinstance(text, str) or text.strip() == "":
         return {label: 0.0 for label in SENTIMENT_LABELS}
 
@@ -58,7 +58,7 @@ def get_sentiment_scores(text):
     return {label: probs[i] for i, label in enumerate(SENTIMENT_LABELS)}
 
 def process_diary_entry(entry, date):
-    """Process a diary entry and extract emotions and sentiment."""
+    
     chunks = chunk_text(entry)
     processed_data = []
     

@@ -6,22 +6,22 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 
-# Load Emotion Analysis Model
+
 emotion_model_name = "j-hartmann/emotion-english-distilroberta-base"
 emotion_tokenizer = AutoTokenizer.from_pretrained(emotion_model_name)
 emotion_model = AutoModelForSequenceClassification.from_pretrained(emotion_model_name).eval()
 
-# Load Sentiment Analysis Model
+
 sentiment_model_name = "siebert/sentiment-roberta-large-english"
 sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_name)
 sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_name).eval()
 
-# Move models to GPU if available
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 emotion_model.to(device)
 sentiment_model.to(device)
 
-# Define labels
+
 EMOTION_LABELS = ["anger", "disgust", "fear", "joy", "sadness", "surprise", "neutral"]
 SENTIMENT_LABELS = ["Negative", "Positive"]
 
@@ -69,7 +69,7 @@ def process_diary_entry(entry, date):
         emotions = get_emotion_scores(chunk)
         sentiment = get_sentiment_scores(chunk)
 
-        # Sum up emotion and sentiment scores across chunks
+       
         for label in EMOTION_LABELS:
             total_emotions[label] += emotions[label]
 
@@ -83,13 +83,13 @@ def process_diary_entry(entry, date):
             "date": date
         })
 
-    # Compute overall dominant emotion
+
     dominant_emotion = max(total_emotions, key=total_emotions.get)
     
-    # Compute sentiment balance
+    
     mood_score = total_sentiments["Positive"] - total_sentiments["Negative"]  
 
-    # Define mood categories based on dominant emotion & sentiment
+
     if dominant_emotion in ["joy", "surprise"]:
         overall_mood = "Happy 😀"
     elif dominant_emotion in ["anger", "disgust", "fear"]:
@@ -99,7 +99,7 @@ def process_diary_entry(entry, date):
     else:
         overall_mood = "Neutral 😐"
 
-    # Adjust based on sentiment
+    
     if mood_score > 0.5:
         overall_mood += " (Positive Outlook)"
     elif mood_score < -0.5:
@@ -111,14 +111,14 @@ def process_diary_entry(entry, date):
         "dominant_emotion": dominant_emotion,
         "emotion_distribution": total_emotions,
         "overall_sentiment": total_sentiments,
-        "entries": processed_data  # All processed chunks
+        "entries": processed_data  
     }
 
 def process_csv(file_path, output_json_path):
     """Process diary CSV, analyze emotions & mood, and save structured data to JSON."""
     df = pd.read_csv(file_path)
     
-    # Ensure necessary columns exist
+
     if "Date" not in df.columns or "Entry" not in df.columns:
         raise ValueError("CSV file must contain 'Date' and 'Entry' columns")
 
@@ -130,12 +130,12 @@ def process_csv(file_path, output_json_path):
         
         processed_entries.append(process_diary_entry(entry, date))
 
-    # Save as JSON file
+    
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(processed_entries, f, indent=4, ensure_ascii=False)
     
-    print(f"✅ Processed diary entries saved to {output_json_path}")
+    print(f" Processed diary entries saved to {output_json_path}")
 
-# Example usage:
+
 if __name__ == "__main__":
     process_csv("/Users/pandhari/ai-diary-project/Data/diary_dataset.csv", "processed_diary.json")
